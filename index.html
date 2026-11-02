@@ -1,0 +1,89 @@
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Öğrenci Giriş Takip Sistemi</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f1f4f8;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    .panel {
+      background: white;
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 22px;
+      border-radius: 14px;
+      box-shadow: 0 2px 12px #0001;
+    }
+    h2 { color: #17365d; }
+    button {
+      padding: 14px 22px;
+      margin: 8px;
+      border: 0;
+      border-radius: 8px;
+      background: #1769aa;
+      color: white;
+      font-size: 17px;
+    }
+    #reader { width: 100%; margin: 15px auto; }
+    #sonuc { font-size: 18px; font-weight: bold; margin: 15px; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Nefise Andiçen MTAL</h2>
+    <h3>Öğrenci Giriş Takip Sistemi</h3>
+    <div id="reader"></div>
+    <button onclick="kamerayiAc()">Kamerayı Aç</button>
+    <button onclick="kamerayiKapat()">Kamerayı Kapat</button>
+    <div id="sonuc">Kamera açılmaya hazır.</div>
+  </div>
+
+  <script>
+    let okuyucu = null;
+    let isleniyor = false;
+
+    async function kamerayiAc() {
+      try {
+        if (!okuyucu) okuyucu = new Html5Qrcode("reader");
+        await okuyucu.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          kodOkundu
+        );
+        document.getElementById("sonuc").textContent = "QR kod okutabilirsiniz.";
+      } catch (e) {
+        document.getElementById("sonuc").textContent =
+          "Kamera açılamadı: " + e.message;
+      }
+    }
+
+    async function kamerayiKapat() {
+      if (okuyucu && okuyucu.isScanning) {
+        await okuyucu.stop();
+      }
+      document.getElementById("sonuc").textContent = "Kamera kapatıldı.";
+    }
+
+    function kodOkundu(kod) {
+      if (isleniyor) return;
+      isleniyor = true;
+      document.getElementById("sonuc").textContent = "Kayıt yapılıyor: " + kod;
+
+      // Sunucu bağlantısını bir sonraki adımda ekleyeceğiz.
+      setTimeout(() => {
+        document.getElementById("sonuc").textContent =
+          "Okunan QR: " + kod;
+        isleniyor = false;
+      }, 1000);
+    }
+  </script>
+</body>
+</html>
