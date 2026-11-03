@@ -73,18 +73,52 @@
     }
 
     function kodOkundu(kod) {
-      if (isleniyor) return;
-      isleniyor = true;
-      document.getElementById("sonuc").textContent = "Kayıt yapılıyor: " + kod;
+  if (isleniyor) return;
+  isleniyor = true;
 
-      // Sunucu bağlantısını bir sonraki adımda ekleyeceğiz.
-      setTimeout(() => {
-        document.getElementById("sonuc").textContent =
-          "Okunan QR: " + kod;
-        isleniyor = false;
-      }, 1000);
+  const sonuc = document.getElementById("sonuc");
+  sonuc.textContent = "Öğrenci kontrol ediliyor...";
+
+  let pin = sessionStorage.getItem("okul_pin");
+
+  if (!pin) {
+    pin = prompt("6 haneli okul PIN kodunu giriniz:");
+    if (!pin) {
+      sonuc.textContent = "PIN girilmedi.";
+      isleniyor = false;
+      return;
     }
-  </script>
-</body>
-</html>
+    sessionStorage.setItem("okul_pin", pin);
+  }
 
+  const iframe = document.createElement("iframe");
+  iframe.name = "kayit_iframe";
+  iframe.style.display = "none";
+  document.body.appendChild(iframe);
+
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7-SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec";
+  form.target = "kayit_iframe";
+
+  const pinInput = document.createElement("input");
+  pinInput.name = "pin";
+  pinInput.value = pin;
+
+  const qrInput = document.createElement("input");
+  qrInput.name = "qr";
+  qrInput.value = kod;
+
+  form.appendChild(pinInput);
+  form.appendChild(qrInput);
+  document.body.appendChild(form);
+  form.submit();
+  form.remove();
+
+  sonuc.textContent = "Kayıt gönderildi. Sonucu Google E-Tablolar'dan kontrol edin.";
+
+  setTimeout(() => {
+    iframe.remove();
+    isleniyor = false;
+  }, 3000);
+}
