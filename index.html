@@ -37,7 +37,10 @@
       font-size: 17px;
     }
 
-    #reader { width: 100%; margin: 15px auto; }
+    #reader {
+      width: 100%;
+      margin: 15px auto;
+    }
 
     #sonuc {
       font-size: 18px;
@@ -49,6 +52,7 @@
 </head>
 
 <body>
+
   <div class="panel">
     <h2>Nefise Andiçen MTAL</h2>
     <h3>Öğrenci Giriş Takip Sistemi</h3>
@@ -61,16 +65,31 @@
     <div id="sonuc">Kamera açılmaya hazır.</div>
   </div>
 
+  <iframe
+    name="kayitFrame"
+    id="kayitFrame"
+    style="display:none;">
+  </iframe>
+
+  <form
+    id="kayitForm"
+    method="POST"
+    target="kayitFrame"
+    action="https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec">
+
+    <input type="hidden" name="pin" id="pinBilgisi">
+    <input type="hidden" name="qr" id="qrBilgisi">
+
+  </form>
+
   <script>
     let okuyucu = null;
     let isleniyor = false;
     let ses = null;
     let zamanlayici = null;
 
-    const APPS_SCRIPT_URL =
-      "https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7-SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec";
-
     // SES SİSTEMİ
+
     function sesHazirla() {
       try {
         const AudioContext =
@@ -85,8 +104,9 @@
         if (ses.state === "suspended") {
           ses.resume();
         }
+
       } catch (e) {
-        console.log("Ses başlatma hatası:", e);
+        console.log("Ses hatası:", e);
       }
     }
 
@@ -100,17 +120,22 @@
 
         const osilator = ses.createOscillator();
         const kazanc = ses.createGain();
+
         const baslangic = ses.currentTime + gecikme;
 
         osilator.type = "sine";
         osilator.frequency.value = frekans;
 
         kazanc.gain.setValueAtTime(0.001, baslangic);
+
         kazanc.gain.exponentialRampToValueAtTime(
-          0.20, baslangic + 0.02
+          0.20,
+          baslangic + 0.02
         );
+
         kazanc.gain.exponentialRampToValueAtTime(
-          0.001, baslangic + sure
+          0.001,
+          baslangic + sure
         );
 
         osilator.connect(kazanc);
@@ -139,6 +164,7 @@
     }
 
     // KAMERA
+
     async function kamerayiAc() {
       sesHazirla();
 
@@ -153,7 +179,10 @@
           { facingMode: "environment" },
           {
             fps: 10,
-            qrbox: { width: 250, height: 250 }
+            qrbox: {
+              width: 250,
+              height: 250
+            }
           },
           kodOkundu
         );
@@ -164,6 +193,8 @@
       } catch (e) {
         document.getElementById("sonuc").textContent =
           "Kamera açılamadı: " + e.message;
+
+        hataSesi();
       }
     }
 
@@ -182,14 +213,17 @@
       }
     }
 
-    // QR OKUNDU
+    // QR OKUNDUĞUNDA
+
     function kodOkundu(kod) {
       if (isleniyor) return;
 
       isleniyor = true;
+
       okumaSesi();
 
       const sonuc = document.getElementById("sonuc");
+
       sonuc.textContent = "Öğrenci kontrol ediliyor...";
 
       let pin = sessionStorage.getItem("okul_pin");
@@ -198,7 +232,9 @@
         pin = prompt("6 haneli okul PIN kodunu giriniz:");
 
         if (!pin || !/^\d{6}$/.test(pin)) {
-          sonuc.textContent = "Geçerli 6 haneli PIN girilmedi.";
+          sonuc.textContent =
+            "Geçerli 6 haneli PIN girilmedi.";
+
           hataSesi();
           isleniyor = false;
           return;
@@ -207,103 +243,88 @@
         sessionStorage.setItem("okul_pin", pin);
       }
 
+      document.getElementById("pinBilgisi").value = pin;
+      document.getElementById("qrBilgisi").value = kod;
+
+      sonuc.textContent = "Kayıt gönderiliyor...";
+
+      clearTimeout(zamanlayici);
+
+      zamanlayici = setTimeout(function() {
+        sonuc.textContent =
+          "Sunucudan yanıt alınamadı. E-Tabloyu kontrol edin.";
+
+        hataSesi();
+        isleniyor = false;
+      }, 15000);
+
       try {
-        const iframe = document.createElement("iframe");
-        const iframeAdi = "kayit_iframe_" + Date.now();
-
-        iframe.name = iframeAdi;
-        iframe.style.display = "none";
-        document.body.appendChild(iframe);
-
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = APPS_SCRIPT_URL;
-        form.target = iframeAdi;
-
-        const pinInput = document.createElement("input");
-        pinInput.type = "hidden";
-        pinInput.name = "pin";
-        pinInput.value = pin;
-
-        const qrInput = document.createElement("input");
-        qrInput.type = "hidden";
-        qrInput.name = "qr";
-        qrInput.value = kod;
-
-        form.appendChild(pinInput);
-        form.appendChild(qrInput);
-        document.body.appendChild(form);
-
-        const mesajDinleyici = function(event) {
-          if (event.source !== iframe.contentWindow) return;
-
-          clearTimeout(zamanlayici);
-          window.removeEventListener("message", mesajDinleyici);
-
-          try {
-            let cevap = event.data;
-
-            if (typeof cevap === "string") {
-              cevap = JSON.parse(cevap);
-            }
-
-            if (typeof cevap === "string") {
-              cevap = JSON.parse(cevap);
-            }
-
-            if (cevap.success) {
-              const ogrenci = cevap.student || {};
-
-              sonuc.textContent =
-                "KAYIT BAŞARILI\n" +
-                (ogrenci.name || "Öğrenci") +
-                " - " +
-                (ogrenci.className || "");
-
-              basariSesi();
-
-            } else {
-              sonuc.textContent =
-                cevap.message || "Kayıt başarısız.";
-
-              hataSesi();
-            }
-
-          } catch (e) {
-            sonuc.textContent =
-              "Sunucu yanıtı okunamadı. E-Tabloyu kontrol edin.";
-
-            hataSesi();
-          }
-
-          form.remove();
-          iframe.remove();
-          isleniyor = false;
-        };
-
-        window.addEventListener("message", mesajDinleyici);
-
-        zamanlayici = setTimeout(function() {
-          window.removeEventListener("message", mesajDinleyici);
-
-          sonuc.textContent =
-            "Sunucudan yanıt alınamadı. E-Tabloyu kontrol edin.";
-
-          hataSesi();
-
-          form.remove();
-          iframe.remove();
-          isleniyor = false;
-        }, 15000);
-
-        HTMLFormElement.prototype.submit.call(form);
+        document.getElementById("kayitForm").submit();
 
       } catch (e) {
-        sonuc.textContent = "Gönderim hatası: " + e.message;
+        clearTimeout(zamanlayici);
+
+        sonuc.textContent =
+          "Gönderim hatası: " + e.message;
+
         hataSesi();
         isleniyor = false;
       }
     }
+
+    // GOOGLE APPS SCRIPT YANITI
+
+    window.addEventListener("message", function(event) {
+      const iframe = document.getElementById("kayitFrame");
+
+      if (event.source !== iframe.contentWindow) {
+        return;
+      }
+
+      clearTimeout(zamanlayici);
+
+      const sonuc = document.getElementById("sonuc");
+
+      try {
+        let cevap = event.data;
+
+        if (typeof cevap === "string") {
+          cevap = JSON.parse(cevap);
+        }
+
+        if (typeof cevap === "string") {
+          cevap = JSON.parse(cevap);
+        }
+
+        if (cevap.success) {
+          const ogrenci = cevap.student || {};
+
+          sonuc.textContent =
+            "KAYIT BAŞARILI\n" +
+            (ogrenci.name || "Öğrenci") +
+            " - " +
+            (ogrenci.className || "");
+
+          basariSesi();
+
+        } else {
+          sonuc.textContent =
+            cevap.message || "Kayıt başarısız.";
+
+          hataSesi();
+        }
+
+      } catch (e) {
+        sonuc.textContent =
+          "Sunucu yanıtı okunamadı. E-Tabloyu kontrol edin.";
+
+        hataSesi();
+      }
+
+      isleniyor = false;
+    });
+
   </script>
+
 </body>
 </html>
