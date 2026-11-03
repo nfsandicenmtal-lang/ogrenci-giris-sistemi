@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Öğrenci Giriş Takip Sistemi</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
+
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -63,15 +64,91 @@
   <script>
     let okuyucu = null;
     let isleniyor = false;
+    let ses = null;
+    let zamanlayici = null;
 
     const APPS_SCRIPT_URL =
-      "https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec";
+      "https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7-SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec";
 
+    // SES SİSTEMİ
+    function sesHazirla() {
+      try {
+        const AudioContext =
+          window.AudioContext || window.webkitAudioContext;
+
+        if (!AudioContext) return;
+
+        if (!ses) {
+          ses = new AudioContext();
+        }
+
+        if (ses.state === "suspended") {
+          ses.resume();
+        }
+      } catch (e) {
+        console.log("Ses başlatma hatası:", e);
+      }
+    }
+
+    function tonCal(frekans, sure, gecikme = 0) {
+      try {
+        if (!ses) return;
+
+        if (ses.state === "suspended") {
+          ses.resume();
+        }
+
+        const osilator = ses.createOscillator();
+        const kazanc = ses.createGain();
+
+        const baslangic = ses.currentTime + gecikme;
+
+        osilator.type = "sine";
+        osilator.frequency.value = frekans;
+
+        kazanc.gain.setValueAtTime(0.001, baslangic);
+        kazanc.gain.exponentialRampToValueAtTime(
+          0.20, baslangic + 0.02
+        );
+        kazanc.gain.exponentialRampToValueAtTime(
+          0.001, baslangic + sure
+        );
+
+        osilator.connect(kazanc);
+        kazanc.connect(ses.destination);
+
+        osilator.start(baslangic);
+        osilator.stop(baslangic + sure);
+
+      } catch (e) {
+        console.log("Ses çalma hatası:", e);
+      }
+    }
+
+    function okumaSesi() {
+      tonCal(1100, 0.15);
+    }
+
+    function basariSesi() {
+      tonCal(880, 0.15);
+      tonCal(1320, 0.20, 0.20);
+    }
+
+    function hataSesi() {
+      tonCal(250, 0.30);
+      tonCal(180, 0.30, 0.35);
+    }
+
+    // KAMERA
     async function kamerayiAc() {
+      sesHazirla();
+
       try {
         if (!okuyucu) {
           okuyucu = new Html5Qrcode("reader");
         }
+
+        if (okuyucu.isScanning) return;
 
         await okuyucu.start(
           { facingMode: "environment" },
@@ -106,10 +183,12 @@
       }
     }
 
+    // QR OKUNDU
     function kodOkundu(kod) {
       if (isleniyor) return;
 
       isleniyor = true;
+      okumaSesi();
 
       const sonuc = document.getElementById("sonuc");
       sonuc.textContent = "Öğrenci kontrol ediliyor...";
@@ -121,6 +200,7 @@
 
         if (!pin || !/^\d{6}$/.test(pin)) {
           sonuc.textContent = "Geçerli 6 haneli PIN girilmedi.";
+          hataSesi();
           isleniyor = false;
           return;
         }
@@ -130,14 +210,16 @@
 
       try {
         const iframe = document.createElement("iframe");
-        iframe.name = "kayit_iframe";
+        const iframeAdi = "kayit_iframe_" + Date.now();
+
+        iframe.name = iframeAdi;
         iframe.style.display = "none";
         document.body.appendChild(iframe);
 
         const form = document.createElement("form");
         form.method = "POST";
         form.action = APPS_SCRIPT_URL;
-        form.target = "kayit_iframe";
+        form.target = iframeAdi;
 
         const pinInput = document.createElement("input");
         pinInput.type = "hidden";
@@ -153,20 +235,74 @@
         form.appendChild(qrInput);
         document.body.appendChild(form);
 
-        form.submit();
-        form.remove();
+        // Sunucudan yanıt bekle
+        const mesajDinleyici = function(event) {
+          if (event.source !== iframe.contentWindow) return;
 
-        sonuc.textContent =
-          "Kayıt isteği gönderildi.\n" +
-          "Google E-Tablolar'dan kontrol ediniz.";
+          clearTimeout(zamanlayici);
+          window.removeEventListener("message", mesajDinleyici);
 
-        setTimeout(() => {
+          try {
+            let cevap = event.data;
+
+            if (typeof cevap === "string") {
+              cevap = JSON.parse(cevap);
+            }
+
+            if (typeof cevap === "string") {
+              cevap = JSON.parse(cevap);
+            }
+
+            if (cevap.success) {
+              const ogrenci = cevap.student || {};
+
+              sonuc.textContent =
+                "KAYIT BAŞARILI\n" +
+                (ogrenci.name || "Öğrenci") +
+                " - " +
+                (ogrenci.className || "");
+
+              basariSesi();
+
+            } else {
+              sonuc.textContent =
+                cevap.message || "Kayıt başarısız.";
+
+              hataSesi();
+            }
+
+          } catch (e) {
+            sonuc.textContent =
+              "Sunucu yanıtı okunamadı. E-Tabloyu kontrol edin.";
+
+            hataSesi();
+          }
+
+          form.remove();
           iframe.remove();
           isleniyor = false;
-        }, 4000);
+        };
+
+        window.addEventListener("message", mesajDinleyici);
+
+        zamanlayici = setTimeout(function() {
+          window.removeEventListener("message", mesajDinleyici);
+
+          sonuc.textContent =
+            "Sunucudan yanıt alınamadı. E-Tabloyu kontrol edin.";
+
+          hataSesi();
+
+          form.remove();
+          iframe.remove();
+          isleniyor = false;
+        }, 15000);
+
+        form.submit();
 
       } catch (e) {
         sonuc.textContent = "Gönderim hatası: " + e.message;
+        hataSesi();
         isleniyor = false;
       }
     }
