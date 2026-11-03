@@ -64,222 +64,220 @@
     <div id="sonuc">Kamera açılmaya hazır.</div>
   </div>
 
-  <script>
-    const APPS_SCRIPT_URL =
-      'https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec';
+<script>
+const APPS_SCRIPT_URL =
+'https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec';
 
-    let okuyucu = null;
-    let isleniyor = false;
-    let ses = null;
-    let istekNo = 0;
+let okuyucu = null;
+let isleniyor = false;
+let ses = null;
+let istekNo = 0;
 
-    function sesHazirla() {
-      try {
-        const AudioContext =
-          window.AudioContext || window.webkitAudioContext;
+function mesaj(yazi) {
+  document.getElementById('sonuc').textContent = yazi;
+}
 
-        if (!AudioContext) return;
+function sesHazirla() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!ses) ses = new AC();
+    if (ses.state === 'suspended') ses.resume();
+  } catch (e) {
+    console.log(e);
+  }
+}
 
-        if (!ses) ses = new AudioContext();
+function tonCal(frekans, sure, gecikme = 0) {
+  try {
+    if (!ses) return;
 
-        if (ses.state === 'suspended') ses.resume();
-      } catch (e) {
-        console.log(e);
-      }
+    const osilator = ses.createOscillator();
+    const kazanc = ses.createGain();
+    const baslangic = ses.currentTime + gecikme;
+
+    osilator.type = 'sine';
+    osilator.frequency.value = frekans;
+
+    kazanc.gain.setValueAtTime(0.001, baslangic);
+    kazanc.gain.exponentialRampToValueAtTime(0.20, baslangic + 0.02);
+    kazanc.gain.exponentialRampToValueAtTime(0.001, baslangic + sure);
+
+    osilator.connect(kazanc);
+    kazanc.connect(ses.destination);
+
+    osilator.start(baslangic);
+    osilator.stop(baslangic + sure);
+  } catch (e) {
+    console.log(e);
+  }
+}
+
+function okumaSesi() {
+  tonCal(1100, 0.15);
+}
+
+function basariSesi() {
+  tonCal(880, 0.15);
+  tonCal(1320, 0.20, 0.20);
+}
+
+function hataSesi() {
+  tonCal(250, 0.30);
+  tonCal(180, 0.30, 0.35);
+}
+
+async function kamerayiAc() {
+  sesHazirla();
+
+  try {
+    if (typeof Html5Qrcode === 'undefined') {
+      throw new Error('QR okuyucu yüklenemedi. İnternet bağlantısını kontrol edin.');
     }
 
-    function tonCal(frekans, sure, gecikme = 0) {
-      try {
-        if (!ses) return;
-
-        const osilator = ses.createOscillator();
-        const kazanc = ses.createGain();
-        const baslangic = ses.currentTime + gecikme;
-
-        osilator.type = 'sine';
-        osilator.frequency.value = frekans;
-
-        kazanc.gain.setValueAtTime(0.001, baslangic);
-        kazanc.gain.exponentialRampToValueAtTime(
-          0.20, baslangic + 0.02
-        );
-        kazanc.gain.exponentialRampToValueAtTime(
-          0.001, baslangic + sure
-        );
-
-        osilator.connect(kazanc);
-        kazanc.connect(ses.destination);
-        osilator.start(baslangic);
-        osilator.stop(baslangic + sure);
-      } catch (e) {
-        console.log(e);
-      }
+    if (!okuyucu) {
+      okuyucu = new Html5Qrcode('reader');
     }
 
-    function okumaSesi() {
-      tonCal(1100, 0.15);
+    if (okuyucu.isScanning) return;
+
+    await okuyucu.start(
+      { facingMode: 'environment' },
+      {
+        fps: 10,
+        qrbox: { width: 250, height: 250 }
+      },
+      kodOkundu
+    );
+
+    mesaj('QR kod okutabilirsiniz.');
+
+  } catch (e) {
+    mesaj('Kamera açılamadı: ' + (e.message || e.name || String(e)));
+    hataSesi();
+  }
+}
+
+async function kamerayiKapat() {
+  try {
+    if (okuyucu && okuyucu.isScanning) {
+      await okuyucu.stop();
     }
 
-    function basariSesi() {
-      tonCal(880, 0.15);
-      tonCal(1320, 0.20, 0.20);
+    mesaj('Kamera kapatıldı.');
+
+  } catch (e) {
+    mesaj('Kamera kapatılamadı: ' + (e.message || String(e)));
+  }
+}
+
+function sunucuyaGonder(qr, pin) {
+  const sonuc = document.getElementById('sonuc');
+
+  istekNo++;
+  const callbackAdi = 'ogrenciCevap_' + istekNo;
+
+  const script = document.createElement('script');
+  let tamamlandi = false;
+  let zamanlayici = null;
+
+  function temizle() {
+    if (tamamlandi) return;
+    tamamlandi = true;
+
+    if (zamanlayici) clearTimeout(zamanlayici);
+
+    delete window[callbackAdi];
+
+    if (script.parentNode) {
+      script.parentNode.removeChild(script);
     }
 
-    function hataSesi() {
-      tonCal(250, 0.30);
-      tonCal(180, 0.30, 0.35);
-    }
+    isleniyor = false;
+  }
 
-    async function kamerayiAc() {
-      sesHazirla();
+  window[callbackAdi] = function(cevap) {
+    temizle();
 
-      try {
-        if (!okuyucu) {
-          okuyucu = new Html5Qrcode('reader');
-        }
+    if (cevap && cevap.success) {
+      const ogrenci = cevap.student || {};
 
-        if (okuyucu.isScanning) return;
+      sonuc.textContent =
+        'GİRİŞ KAYDEDİLDİ\n' +
+        (ogrenci.name || 'Öğrenci') + '\n' +
+        (ogrenci.className || '') + ' - ' +
+        (ogrenci.no || '') + '\n' +
+        (ogrenci.date || '') + ' ' +
+        (ogrenci.time || '');
 
-        await okuyucu.start(
-          { facingMode: 'environment' },
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 }
-          },
-          kodOkundu
-        );
+      basariSesi();
 
-        document.getElementById('sonuc').textContent =
-          'QR kod okutabilirsiniz.';
+    } else {
+      const hata = cevap && cevap.message
+        ? cevap.message
+        : 'Sunucudan geçersiz yanıt geldi.';
 
-      } catch (e) {
-        document.getElementById('sonuc').textContent =
-          'Kamera açılamadı: ' + e.message;
-        hataSesi();
-      }
-    }
+      sonuc.textContent = 'KAYIT YAPILAMADI\n' + hata;
 
-    async function kamerayiKapat() {
-      try {
-        if (okuyucu && okuyucu.isScanning) {
-          await okuyucu.stop();
-        }
-
-        document.getElementById('sonuc').textContent =
-          'Kamera kapatıldı.';
-
-      } catch (e) {
-        document.getElementById('sonuc').textContent =
-          'Kamera kapatılamadı: ' + e.message;
-      }
-    }
-
-    function sunucuyaGonder(qr, pin) {
-      const sonuc = document.getElementById('sonuc');
-
-      istekNo++;
-      const buIstek = istekNo;
-
-      const callbackAdi = 'ogrenciCevap_' + buIstek;
-
-      const script = document.createElement('script');
-      let tamamlandi = false;
-
-      function temizle() {
-        if (tamamlandi) return;
-        tamamlandi = true;
-
-        clearTimeout(zamanlayici);
-        delete window[callbackAdi];
-
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-
-        isleniyor = false;
-      }
-
-      window[callbackAdi] = function(cevap) {
-        temizle();
-
-        if (cevap && cevap.success) {
-          const ogrenci = cevap.student || {};
-
-          sonuc.textContent =
-            'KAYIT BAŞARILI\n' +
-            (ogrenci.name || 'Öğrenci') +
-            ' - ' +
-            (ogrenci.className || '') +
-            '\n' +
-            (ogrenci.date || '') +
-            ' ' +
-            (ogrenci.time || '');
-
-          basariSesi();
-
-        } else {
-          sonuc.textContent =
-            cevap && cevap.message
-              ? cevap.message
-              : 'Sunucudan geçersiz yanıt geldi.';
-
-          hataSesi();
-        }
-      };
-
-      const parametreler = new URLSearchParams({
-        callback: callbackAdi,
-        pin: pin,
-        qr: qr,
-        t: String(Date.now())
-      });
-
-      script.src = APPS_SCRIPT_URL + '?' + parametreler.toString();
-
-      script.onerror = function() {
-        temizle();
-        sonuc.textContent =
-          'Sunucuya ulaşılamadı. İnternet bağlantısını kontrol edin.';
-        hataSesi();
-      };
-
-      const zamanlayici = setTimeout(function() {
-        temizle();
-        sonuc.textContent =
-          'Sunucudan 15 saniye içinde yanıt alınamadı.';
-        hataSesi();
-      }, 15000);
-
-      document.body.appendChild(script);
-    }
-
-    function kodOkundu(kod) {
-      if (isleniyor) return;
-
-      isleniyor = true;
-      okumaSesi();
-
-      const sonuc = document.getElementById('sonuc');
-
-      sonuc.textContent = 'Öğrenci kontrol ediliyor...';
-
-      let pin = sessionStorage.getItem('okul_pin');
-
-      if (!pin) {
-        pin = prompt('6 haneli okul PIN kodunu giriniz:');
-
-        if (!pin || !/^\d{6}$/.test(pin)) {
-          sonuc.textContent = 'Geçerli 6 haneli PIN girilmedi.';
-          hataSesi();
-          isleniyor = false;
-          return;
-        }
-
-        sessionStorage.setItem('okul_pin', pin);
+      if (hata.toLocaleLowerCase('tr-TR').includes('pin')) {
+        sessionStorage.removeItem('okul_pin');
       }
 
-      sunucuyaGonder(kod, pin);
+      hataSesi();
     }
-  </script>
+  };
+
+  const parametreler = new URLSearchParams({
+    callback: callbackAdi,
+    pin: pin,
+    qr: qr,
+    t: String(Date.now())
+  });
+
+  script.src = APPS_SCRIPT_URL + '?' + parametreler.toString();
+
+  script.onerror = function() {
+    temizle();
+    sonuc.textContent =
+      'Sunucu bağlantı hatası. Apps Script dağıtımını kontrol edin.';
+    hataSesi();
+  };
+
+  zamanlayici = setTimeout(function() {
+    temizle();
+    sonuc.textContent =
+      '15 saniyede sunucudan yanıt alınamadı. Bağlantı veya dağıtım kontrol edilmeli.';
+    hataSesi();
+  }, 15000);
+
+  document.body.appendChild(script);
+}
+
+function kodOkundu(kod) {
+  if (isleniyor) return;
+
+  isleniyor = true;
+  okumaSesi();
+
+  mesaj('QR OKUNDU: ' + kod + '\nÖğrenci kontrol ediliyor...');
+
+  let pin = sessionStorage.getItem('okul_pin');
+
+  if (!pin) {
+    pin = prompt('6 haneli okul PIN kodunu giriniz:');
+
+    if (!pin || !/^\d{6}$/.test(pin)) {
+      mesaj('Geçerli 6 haneli PIN girilmedi.');
+      hataSesi();
+      isleniyor = false;
+      return;
+    }
+
+    sessionStorage.setItem('okul_pin', pin);
+  }
+
+  sunucuyaGonder(kod, pin);
+}
+</script>
 </body>
 </html>
