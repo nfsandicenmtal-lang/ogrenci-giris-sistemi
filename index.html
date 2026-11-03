@@ -64,27 +64,14 @@
     <div id="sonuc">Kamera açılmaya hazır.</div>
   </div>
 
-  <iframe
-    name="kayitFrame"
-    id="kayitFrame"
-    style="display:none;">
-  </iframe>
-
-  <form
-    id="kayitForm"
-    method="POST"
-    target="kayitFrame"
-    action="https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec">
-
-    <input type="hidden" name="pin" id="pinBilgisi">
-    <input type="hidden" name="qr" id="qrBilgisi">
-  </form>
-
   <script>
+    const APPS_SCRIPT_URL =
+      'https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec';
+
     let okuyucu = null;
     let isleniyor = false;
     let ses = null;
-    let zamanlayici = null;
+    let istekNo = 0;
 
     function sesHazirla() {
       try {
@@ -95,9 +82,9 @@
 
         if (!ses) ses = new AudioContext();
 
-        if (ses.state === "suspended") ses.resume();
+        if (ses.state === 'suspended') ses.resume();
       } catch (e) {
-        console.log("Ses hatası:", e);
+        console.log(e);
       }
     }
 
@@ -105,14 +92,13 @@
       try {
         if (!ses) return;
 
-        if (ses.state === "suspended") ses.resume();
-
         const osilator = ses.createOscillator();
         const kazanc = ses.createGain();
         const baslangic = ses.currentTime + gecikme;
 
-        osilator.type = "sine";
+        osilator.type = 'sine';
         osilator.frequency.value = frekans;
+
         kazanc.gain.setValueAtTime(0.001, baslangic);
         kazanc.gain.exponentialRampToValueAtTime(
           0.20, baslangic + 0.02
@@ -126,7 +112,7 @@
         osilator.start(baslangic);
         osilator.stop(baslangic + sure);
       } catch (e) {
-        console.log("Ses çalma hatası:", e);
+        console.log(e);
       }
     }
 
@@ -149,13 +135,13 @@
 
       try {
         if (!okuyucu) {
-          okuyucu = new Html5Qrcode("reader");
+          okuyucu = new Html5Qrcode('reader');
         }
 
         if (okuyucu.isScanning) return;
 
         await okuyucu.start(
-          { facingMode: "environment" },
+          { facingMode: 'environment' },
           {
             fps: 10,
             qrbox: { width: 250, height: 250 }
@@ -163,12 +149,12 @@
           kodOkundu
         );
 
-        document.getElementById("sonuc").textContent =
-          "QR kod okutabilirsiniz.";
+        document.getElementById('sonuc').textContent =
+          'QR kod okutabilirsiniz.';
 
       } catch (e) {
-        document.getElementById("sonuc").textContent =
-          "Kamera açılamadı: " + e.message;
+        document.getElementById('sonuc').textContent =
+          'Kamera açılamadı: ' + e.message;
         hataSesi();
       }
     }
@@ -179,13 +165,92 @@
           await okuyucu.stop();
         }
 
-        document.getElementById("sonuc").textContent =
-          "Kamera kapatıldı.";
+        document.getElementById('sonuc').textContent =
+          'Kamera kapatıldı.';
 
       } catch (e) {
-        document.getElementById("sonuc").textContent =
-          "Kamera kapatılamadı: " + e.message;
+        document.getElementById('sonuc').textContent =
+          'Kamera kapatılamadı: ' + e.message;
       }
+    }
+
+    function sunucuyaGonder(qr, pin) {
+      const sonuc = document.getElementById('sonuc');
+
+      istekNo++;
+      const buIstek = istekNo;
+
+      const callbackAdi = 'ogrenciCevap_' + buIstek;
+
+      const script = document.createElement('script');
+      let tamamlandi = false;
+
+      function temizle() {
+        if (tamamlandi) return;
+        tamamlandi = true;
+
+        clearTimeout(zamanlayici);
+        delete window[callbackAdi];
+
+        if (script.parentNode) {
+          script.parentNode.removeChild(script);
+        }
+
+        isleniyor = false;
+      }
+
+      window[callbackAdi] = function(cevap) {
+        temizle();
+
+        if (cevap && cevap.success) {
+          const ogrenci = cevap.student || {};
+
+          sonuc.textContent =
+            'KAYIT BAŞARILI\n' +
+            (ogrenci.name || 'Öğrenci') +
+            ' - ' +
+            (ogrenci.className || '') +
+            '\n' +
+            (ogrenci.date || '') +
+            ' ' +
+            (ogrenci.time || '');
+
+          basariSesi();
+
+        } else {
+          sonuc.textContent =
+            cevap && cevap.message
+              ? cevap.message
+              : 'Sunucudan geçersiz yanıt geldi.';
+
+          hataSesi();
+        }
+      };
+
+      const parametreler = new URLSearchParams({
+        callback: callbackAdi,
+        pin: pin,
+        qr: qr,
+        t: String(Date.now())
+      });
+
+      script.src = APPS_SCRIPT_URL + '?' + parametreler.toString();
+
+      script.onerror = function() {
+        temizle();
+        sonuc.textContent =
+          'Sunucuya ulaşılamadı. İnternet bağlantısını kontrol edin.';
+        hataSesi();
+      };
+
+      const zamanlayici = setTimeout(function() {
+        temizle();
+        sonuc.textContent =
+          'Sunucudan 15 saniye içinde yanıt alınamadı.';
+        hataSesi();
+      }, 15000);
+
+      document.body.appendChild(script);
     }
 
     function kodOkundu(kod) {
@@ -194,96 +259,27 @@
       isleniyor = true;
       okumaSesi();
 
-      const sonuc = document.getElementById("sonuc");
-      sonuc.textContent = "Öğrenci kontrol ediliyor...";
+      const sonuc = document.getElementById('sonuc');
 
-      let pin = sessionStorage.getItem("okul_pin");
+      sonuc.textContent = 'Öğrenci kontrol ediliyor...';
+
+      let pin = sessionStorage.getItem('okul_pin');
 
       if (!pin) {
-        pin = prompt("6 haneli okul PIN kodunu giriniz:");
+        pin = prompt('6 haneli okul PIN kodunu giriniz:');
 
         if (!pin || !/^\d{6}$/.test(pin)) {
-          sonuc.textContent = "Geçerli 6 haneli PIN girilmedi.";
+          sonuc.textContent = 'Geçerli 6 haneli PIN girilmedi.';
           hataSesi();
           isleniyor = false;
           return;
         }
 
-        sessionStorage.setItem("okul_pin", pin);
+        sessionStorage.setItem('okul_pin', pin);
       }
 
-      document.getElementById("pinBilgisi").value = pin;
-      document.getElementById("qrBilgisi").value = kod;
-
-      sonuc.textContent = "Kayıt gönderiliyor...";
-
-      clearTimeout(zamanlayici);
-
-      zamanlayici = setTimeout(function() {
-        sonuc.textContent =
-          "Sunucudan 15 saniye içinde yanıt alınamadı.";
-        hataSesi();
-        isleniyor = false;
-      }, 15000);
-
-      try {
-        document.getElementById("kayitForm").submit();
-      } catch (e) {
-        clearTimeout(zamanlayici);
-        sonuc.textContent = "Gönderim hatası: " + e.message;
-        hataSesi();
-        isleniyor = false;
-      }
+      sunucuyaGonder(kod, pin);
     }
-
-    // Apps Script yanıtını karşılar.
-    window.addEventListener("message", function(event) {
-      clearTimeout(zamanlayici);
-
-      const sonuc = document.getElementById("sonuc");
-
-      try {
-        let cevap = event.data;
-
-        if (typeof cevap === "string") {
-          cevap = JSON.parse(cevap);
-        }
-
-        if (typeof cevap === "string") {
-          cevap = JSON.parse(cevap);
-        }
-
-        if (!cevap || typeof cevap.success !== "boolean") {
-          return;
-        }
-
-        if (cevap.success) {
-          const ogrenci = cevap.student || {};
-
-          sonuc.textContent =
-            "KAYIT BAŞARILI\n" +
-            (ogrenci.name || "Öğrenci") +
-            " - " +
-            (ogrenci.className || "") +
-            "\n" +
-            (ogrenci.date || "") +
-            " " +
-            (ogrenci.time || "");
-
-          basariSesi();
-        } else {
-          sonuc.textContent = cevap.message || "Kayıt başarısız.";
-          hataSesi();
-        }
-
-      } catch (e) {
-        sonuc.textContent =
-          "Sunucu yanıtı okunamadı: " + e.message;
-        hataSesi();
-      }
-
-      isleniyor = false;
-    });
   </script>
 </body>
 </html>
