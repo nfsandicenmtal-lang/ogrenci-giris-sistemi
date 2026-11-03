@@ -100,7 +100,6 @@
 
         const osilator = ses.createOscillator();
         const kazanc = ses.createGain();
-
         const baslangic = ses.currentTime + gecikme;
 
         osilator.type = "sine";
@@ -235,7 +234,6 @@
         form.appendChild(qrInput);
         document.body.appendChild(form);
 
-        // Sunucudan yanıt bekle
         const mesajDinleyici = function(event) {
           if (event.source !== iframe.contentWindow) return;
 
@@ -298,7 +296,7 @@
           isleniyor = false;
         }, 15000);
 
-        form.submit();
+        HTMLFormElement.prototype.submit.call(form);
 
       } catch (e) {
         sonuc.textContent = "Gönderim hatası: " + e.message;
