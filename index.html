@@ -14,6 +14,7 @@
       padding: 20px;
       text-align: center;
     }
+
     .panel {
       background: white;
       max-width: 500px;
@@ -22,7 +23,9 @@
       border-radius: 14px;
       box-shadow: 0 2px 12px #0001;
     }
+
     h2 { color: #17365d; }
+
     button {
       padding: 14px 22px;
       margin: 8px;
@@ -32,17 +35,28 @@
       color: white;
       font-size: 17px;
     }
+
     #reader { width: 100%; margin: 15px auto; }
-    #sonuc { font-size: 18px; font-weight: bold; margin: 15px; }
+
+    #sonuc {
+      font-size: 18px;
+      font-weight: bold;
+      margin: 15px;
+      white-space: pre-line;
+    }
   </style>
 </head>
+
 <body>
   <div class="panel">
     <h2>Nefise Andiçen MTAL</h2>
     <h3>Öğrenci Giriş Takip Sistemi</h3>
+
     <div id="reader"></div>
+
     <button onclick="kamerayiAc()">Kamerayı Aç</button>
     <button onclick="kamerayiKapat()">Kamerayı Kapat</button>
+
     <div id="sonuc">Kamera açılmaya hazır.</div>
   </div>
 
@@ -50,15 +64,27 @@
     let okuyucu = null;
     let isleniyor = false;
 
+    const APPS_SCRIPT_URL =
+      "https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec";
+
     async function kamerayiAc() {
       try {
-        if (!okuyucu) okuyucu = new Html5Qrcode("reader");
+        if (!okuyucu) {
+          okuyucu = new Html5Qrcode("reader");
+        }
+
         await okuyucu.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 }
+          },
           kodOkundu
         );
-        document.getElementById("sonuc").textContent = "QR kod okutabilirsiniz.";
+
+        document.getElementById("sonuc").textContent =
+          "QR kod okutabilirsiniz.";
+
       } catch (e) {
         document.getElementById("sonuc").textContent =
           "Kamera açılamadı: " + e.message;
@@ -66,59 +92,84 @@
     }
 
     async function kamerayiKapat() {
-      if (okuyucu && okuyucu.isScanning) {
-        await okuyucu.stop();
+      try {
+        if (okuyucu && okuyucu.isScanning) {
+          await okuyucu.stop();
+        }
+
+        document.getElementById("sonuc").textContent =
+          "Kamera kapatıldı.";
+
+      } catch (e) {
+        document.getElementById("sonuc").textContent =
+          "Kamera kapatılamadı: " + e.message;
       }
-      document.getElementById("sonuc").textContent = "Kamera kapatıldı.";
     }
 
     function kodOkundu(kod) {
-  if (isleniyor) return;
-  isleniyor = true;
+      if (isleniyor) return;
 
-  const sonuc = document.getElementById("sonuc");
-  sonuc.textContent = "Öğrenci kontrol ediliyor...";
+      isleniyor = true;
 
-  let pin = sessionStorage.getItem("okul_pin");
+      const sonuc = document.getElementById("sonuc");
+      sonuc.textContent = "Öğrenci kontrol ediliyor...";
 
-  if (!pin) {
-    pin = prompt("6 haneli okul PIN kodunu giriniz:");
-    if (!pin) {
-      sonuc.textContent = "PIN girilmedi.";
-      isleniyor = false;
-      return;
+      let pin = sessionStorage.getItem("okul_pin");
+
+      if (!pin) {
+        pin = prompt("6 haneli okul PIN kodunu giriniz:");
+
+        if (!pin || !/^\d{6}$/.test(pin)) {
+          sonuc.textContent = "Geçerli 6 haneli PIN girilmedi.";
+          isleniyor = false;
+          return;
+        }
+
+        sessionStorage.setItem("okul_pin", pin);
+      }
+
+      try {
+        const iframe = document.createElement("iframe");
+        iframe.name = "kayit_iframe";
+        iframe.style.display = "none";
+        document.body.appendChild(iframe);
+
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = APPS_SCRIPT_URL;
+        form.target = "kayit_iframe";
+
+        const pinInput = document.createElement("input");
+        pinInput.type = "hidden";
+        pinInput.name = "pin";
+        pinInput.value = pin;
+
+        const qrInput = document.createElement("input");
+        qrInput.type = "hidden";
+        qrInput.name = "qr";
+        qrInput.value = kod;
+
+        form.appendChild(pinInput);
+        form.appendChild(qrInput);
+        document.body.appendChild(form);
+
+        form.submit();
+        form.remove();
+
+        sonuc.textContent =
+          "Kayıt isteği gönderildi.\n" +
+          "Google E-Tablolar'dan kontrol ediniz.";
+
+        setTimeout(() => {
+          iframe.remove();
+          isleniyor = false;
+        }, 4000);
+
+      } catch (e) {
+        sonuc.textContent = "Gönderim hatası: " + e.message;
+        isleniyor = false;
+      }
     }
-    sessionStorage.setItem("okul_pin", pin);
-  }
-
-  const iframe = document.createElement("iframe");
-  iframe.name = "kayit_iframe";
-  iframe.style.display = "none";
-  document.body.appendChild(iframe);
-
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = "https://script.google.com/macros/s/AKfycbz_AB4ixPAsayv6RpBu-mUDJRY_JRVHX-7-SCo3TxKA0KDhvDsSdxQFwH8tryta6ckb78g/exec";
-  form.target = "kayit_iframe";
-
-  const pinInput = document.createElement("input");
-  pinInput.name = "pin";
-  pinInput.value = pin;
-
-  const qrInput = document.createElement("input");
-  qrInput.name = "qr";
-  qrInput.value = kod;
-
-  form.appendChild(pinInput);
-  form.appendChild(qrInput);
-  document.body.appendChild(form);
-  form.submit();
-  form.remove();
-
-  sonuc.textContent = "Kayıt gönderildi. Sonucu Google E-Tablolar'dan kontrol edin.";
-
-  setTimeout(() => {
-    iframe.remove();
-    isleniyor = false;
-  }, 3000);
-}
+  </script>
+</body>
+</html>
