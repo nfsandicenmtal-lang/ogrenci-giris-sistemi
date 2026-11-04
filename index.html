@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -34,6 +35,12 @@
       background: #1769aa;
       color: white;
       font-size: 17px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     #reader {
@@ -46,6 +53,19 @@
       font-weight: bold;
       margin: 15px;
       white-space: pre-line;
+    }
+
+    #ihlalButonu {
+      display: none;
+      background: #c62828;
+      width: 90%;
+      max-width: 350px;
+      font-weight: bold;
+    }
+
+    #gecDurumu {
+      color: #c62828;
+      font-weight: bold;
     }
   </style>
 </head>
@@ -61,6 +81,11 @@
     <button onclick="kamerayiKapat()">Kamerayı Kapat</button>
 
     <div id="sonuc">Kamera açılmaya hazır.</div>
+    <div id="gecDurumu"></div>
+
+    <button id="ihlalButonu" onclick="ihlalKaydet()">
+      KILIK KIYAFET UYGUN DEĞİL
+    </button>
   </div>
 
 <script>
@@ -71,6 +96,8 @@ let okuyucu = null;
 let isleniyor = false;
 let ses = null;
 let istekNo = 0;
+let mevcutOgrenciNo = null;
+let ihlalKaydedildi = false;
 
 function mesaj(yazi) {
   document.getElementById('sonuc').textContent = yazi;
@@ -170,9 +197,7 @@ async function kamerayiKapat() {
   }
 }
 
-function sunucuyaGonder(qr, pin) {
-  const sonuc = document.getElementById('sonuc');
-
+function jsonpGonder(parametreler, callback) {
   istekNo++;
   const callbackAdi = 'ogrenciCevap_' + istekNo;
 
@@ -191,15 +216,53 @@ function sunucuyaGonder(qr, pin) {
     if (script.parentNode) {
       script.parentNode.removeChild(script);
     }
-
-    isleniyor = false;
   }
 
   window[callbackAdi] = function(cevap) {
     temizle();
+    callback(cevap);
+  };
+
+  parametreler.callback = callbackAdi;
+  parametreler.t = String(Date.now());
+
+  const sorgu = new URLSearchParams(parametreler);
+  script.src = APPS_SCRIPT_URL + '?' + sorgu.toString();
+
+  script.onerror = function() {
+    temizle();
+    callback({
+      success: false,
+      message: 'Sunucu bağlantı hatası.'
+    });
+  };
+
+  zamanlayici = setTimeout(function() {
+    temizle();
+    callback({
+      success: false,
+      message: '15 saniyede sunucudan yanıt alınamadı.'
+    });
+  }, 15000);
+
+  document.body.appendChild(script);
+}
+
+function sunucuyaGonder(qr, pin) {
+  const sonuc = document.getElementById('sonuc');
+
+  jsonpGonder({
+    pin: pin,
+    qr: qr
+  }, function(cevap) {
+
+    isleniyor = false;
 
     if (cevap && cevap.success) {
       const ogrenci = cevap.student || {};
+
+      mevcutOgrenciNo = ogrenci.no;
+      ihlalKaydedildi = false;
 
       sonuc.textContent =
         'GİRİŞ KAYDEDİLDİ\n' +
@@ -208,6 +271,14 @@ function sunucuyaGonder(qr, pin) {
         (ogrenci.no || '') + '\n' +
         (ogrenci.date || '') + ' ' +
         (ogrenci.time || '');
+
+      document.getElementById('gecDurumu').textContent =
+        ogrenci.late ? 'GEÇ KALDI' : 'ZAMANINDA';
+
+      document.getElementById('ihlalButonu').style.display = 'inline-block';
+      document.getElementById('ihlalButonu').disabled = false;
+      document.getElementById('ihlalButonu').textContent =
+        'KILIK KIYAFET UYGUN DEĞİL';
 
       basariSesi();
 
@@ -218,38 +289,16 @@ function sunucuyaGonder(qr, pin) {
 
       sonuc.textContent = 'KAYIT YAPILAMADI\n' + hata;
 
+      document.getElementById('gecDurumu').textContent = '';
+      document.getElementById('ihlalButonu').style.display = 'none';
+
       if (hata.toLocaleLowerCase('tr-TR').includes('pin')) {
         sessionStorage.removeItem('okul_pin');
       }
 
       hataSesi();
     }
-  };
-
-  const parametreler = new URLSearchParams({
-    callback: callbackAdi,
-    pin: pin,
-    qr: qr,
-    t: String(Date.now())
   });
-
-  script.src = APPS_SCRIPT_URL + '?' + parametreler.toString();
-
-  script.onerror = function() {
-    temizle();
-    sonuc.textContent =
-      'Sunucu bağlantı hatası. Apps Script dağıtımını kontrol edin.';
-    hataSesi();
-  };
-
-  zamanlayici = setTimeout(function() {
-    temizle();
-    sonuc.textContent =
-      '15 saniyede sunucudan yanıt alınamadı. Bağlantı veya dağıtım kontrol edilmeli.';
-    hataSesi();
-  }, 15000);
-
-  document.body.appendChild(script);
 }
 
 function kodOkundu(kod) {
@@ -257,6 +306,12 @@ function kodOkundu(kod) {
 
   isleniyor = true;
   okumaSesi();
+
+  mevcutOgrenciNo = null;
+  ihlalKaydedildi = false;
+
+  document.getElementById('ihlalButonu').style.display = 'none';
+  document.getElementById('gecDurumu').textContent = '';
 
   mesaj('QR OKUNDU: ' + kod + '\nÖğrenci kontrol ediliyor...');
 
@@ -276,6 +331,45 @@ function kodOkundu(kod) {
   }
 
   sunucuyaGonder(kod, pin);
+}
+
+function ihlalKaydet() {
+  if (!mevcutOgrenciNo || ihlalKaydedildi) return;
+
+  const buton = document.getElementById('ihlalButonu');
+  const pin = sessionStorage.getItem('okul_pin');
+
+  if (!pin) {
+    mesaj('PIN bulunamadı. Sayfayı yenileyip tekrar deneyin.');
+    return;
+  }
+
+  buton.disabled = true;
+  buton.textContent = 'KAYDEDİLİYOR...';
+
+  jsonpGonder({
+    pin: pin,
+    action: 'violation',
+    schoolNo: mevcutOgrenciNo
+  }, function(cevap) {
+
+    if (cevap && cevap.success) {
+      ihlalKaydedildi = true;
+      buton.textContent = 'İHLAL KAYDEDİLDİ';
+      mesaj('GİRİŞ KAYDEDİLDİ\nKılık kıyafet ihlali de kaydedildi.');
+      basariSesi();
+
+    } else {
+      buton.disabled = false;
+      buton.textContent = 'KILIK KIYAFET UYGUN DEĞİL';
+      mesaj(
+        cevap && cevap.message
+          ? cevap.message
+          : 'İhlal kaydedilemedi.'
+      );
+      hataSesi();
+    }
+  });
 }
 </script>
 </body>
