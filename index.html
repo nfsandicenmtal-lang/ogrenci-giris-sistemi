@@ -452,7 +452,92 @@ function kodOkundu(kod) {
 
   sunucuyaGonder(kod, pin);
 }
+function manuelGiris() {
+  if (isleniyor || ihlalIsleniyor) return;
 
+  const okulNo = document.getElementById('okulNo').value.trim();
+
+  if (!okulNo) {
+    mesaj('Lütfen öğrenci okul numarasını girin.');
+    hataSesi();
+    return;
+  }
+
+  isleniyor = true;
+  mevcutOgrenciNo = null;
+
+  ihlalAlaniniGizle();
+  ihlalSecimleriniTemizle();
+  document.getElementById('gecDurumu').textContent = '';
+
+  mesaj('Öğrenci numarası kontrol ediliyor...');
+
+  sesHazirla();
+  okumaSesi();
+
+  let pin = sessionStorage.getItem('okul_pin');
+
+  if (!pin) {
+    pin = prompt('6 haneli okul PIN kodunu giriniz:');
+
+    if (!pin || !/^\d{6}$/.test(pin)) {
+      mesaj('Geçerli 6 haneli PIN girilmedi.');
+      hataSesi();
+      isleniyor = false;
+      return;
+    }
+
+    sessionStorage.setItem('okul_pin', pin);
+  }
+
+  jsonpGonder({
+    pin: pin,
+    action: 'manual',
+    schoolNo: okulNo
+  }, function(cevap) {
+    isleniyor = false;
+
+    if (cevap && cevap.success) {
+      const ogrenci = cevap.student || {};
+
+      mevcutOgrenciNo = ogrenci.no;
+
+      mesaj(
+        'GİRİŞ BİLGİSİ\n' +
+        (ogrenci.name || 'Öğrenci') + '\n' +
+        (ogrenci.className || '') + ' - ' +
+        (ogrenci.no || '') + '\n' +
+        (ogrenci.date || '') + ' ' +
+        (ogrenci.time || '')
+      );
+
+      document.getElementById('gecDurumu').textContent =
+        ogrenci.late ? 'GEÇ KALDI' : 'ZAMANINDA';
+
+      ihlalSecimleriniTemizle();
+      document.getElementById('ihlalKaydetButonu').disabled = false;
+      document.getElementById('ihlalKaydetButonu').textContent =
+        'SEÇİLEN İHLALLERİ KAYDET';
+
+      ihlalAlaniniGoster();
+      basariSesi();
+
+      document.getElementById('okulNo').value = '';
+
+    } else {
+      const hata = cevap && cevap.message
+        ? cevap.message
+        : 'Öğrenci bulunamadı.';
+
+      mesaj('İŞLEM BAŞARISIZ\n' + hata);
+      hataSesi();
+
+      if (hata.toLocaleLowerCase('tr-TR').includes('pin')) {
+        sessionStorage.removeItem('okul_pin');
+      }
+    }
+  });
+}
 function ihlalKaydet() {
   if (!mevcutOgrenciNo || ihlalIsleniyor) return;
 
