@@ -82,7 +82,18 @@
 
     <div id="sonuc">Kamera açılmaya hazır.</div>
     <div id="gecDurumu"></div>
+<div id="ihlalAlani" style="display:none; margin-top:20px;">
+  <h3>İhlal Türünü Seçin</h3>
 
+  <label><input type="checkbox" value="KILIK KIYAFET UYGUN DEĞİL"> Kılık kıyafet uygun değil</label><br>
+  <label><input type="checkbox" value="CEP TELEFONU"> Cep telefonu</label><br>
+  <label><input type="checkbox" value="SİGARA / TÜTÜN ÜRÜNÜ"> Sigara / tütün ürünü</label><br>
+  <label><input type="checkbox" value="ELEKTRONİK SİGARA"> Elektronik sigara</label><br>
+  <label><input type="checkbox" value="MAKYAJ MALZEMESİ"> Makyaj malzemesi</label><br>
+  <label><input type="checkbox" value="DİĞER"> Diğer</label><br>
+
+  <button onclick="ihlalKaydet()">SEÇİLEN İHLALLERİ KAYDET</button>
+</div>
     <button id="ihlalButonu" onclick="ihlalKaydet()">
       KILIK KIYAFET UYGUN DEĞİL
     </button>
