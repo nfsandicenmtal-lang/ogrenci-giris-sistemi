@@ -55,16 +55,44 @@
       white-space: pre-line;
     }
 
-    #ihlalButonu {
-      display: none;
-      background: #c62828;
-      width: 90%;
-      max-width: 350px;
+    #gecDurumu {
+      color: #c62828;
       font-weight: bold;
     }
 
-    #gecDurumu {
+    #ihlalAlani {
+      display: none;
+      margin-top: 20px;
+      padding: 15px;
+      background: #fff5f5;
+      border-radius: 10px;
+      text-align: left;
+    }
+
+    #ihlalAlani h3 {
+      text-align: center;
       color: #c62828;
+    }
+
+    .ihlalSecenek {
+      display: block;
+      padding: 10px;
+      margin: 6px 0;
+      background: white;
+      border-radius: 6px;
+      font-size: 16px;
+    }
+
+    .ihlalSecenek input {
+      transform: scale(1.3);
+      margin-right: 10px;
+    }
+
+    #ihlalKaydetButonu {
+      display: block;
+      width: 100%;
+      margin: 15px auto 5px;
+      background: #c62828;
       font-weight: bold;
     }
   </style>
@@ -82,21 +110,44 @@
 
     <div id="sonuc">Kamera açılmaya hazır.</div>
     <div id="gecDurumu"></div>
-<div id="ihlalAlani" style="display:none; margin-top:20px;">
-  <h3>İhlal Türünü Seçin</h3>
 
-  <label><input type="checkbox" value="KILIK KIYAFET UYGUN DEĞİL"> Kılık kıyafet uygun değil</label><br>
-  <label><input type="checkbox" value="CEP TELEFONU"> Cep telefonu</label><br>
-  <label><input type="checkbox" value="SİGARA / TÜTÜN ÜRÜNÜ"> Sigara / tütün ürünü</label><br>
-  <label><input type="checkbox" value="ELEKTRONİK SİGARA"> Elektronik sigara</label><br>
-  <label><input type="checkbox" value="MAKYAJ MALZEMESİ"> Makyaj malzemesi</label><br>
-  <label><input type="checkbox" value="DİĞER"> Diğer</label><br>
+    <div id="ihlalAlani">
+      <h3>İhlal Türünü Seçin</h3>
 
-  <button onclick="ihlalKaydet()">SEÇİLEN İHLALLERİ KAYDET</button>
-</div>
-    <button id="ihlalButonu" onclick="ihlalKaydet()">
-      KILIK KIYAFET UYGUN DEĞİL
-    </button>
+      <label class="ihlalSecenek">
+        <input type="checkbox" value="KILIK KIYAFET UYGUN DEĞİL">
+        Kılık kıyafet uygun değil
+      </label>
+
+      <label class="ihlalSecenek">
+        <input type="checkbox" value="CEP TELEFONU">
+        Cep telefonu
+      </label>
+
+      <label class="ihlalSecenek">
+        <input type="checkbox" value="SİGARA / TÜTÜN ÜRÜNÜ">
+        Sigara / tütün ürünü
+      </label>
+
+      <label class="ihlalSecenek">
+        <input type="checkbox" value="ELEKTRONİK SİGARA">
+        Elektronik sigara
+      </label>
+
+      <label class="ihlalSecenek">
+        <input type="checkbox" value="MAKYAJ MALZEMESİ">
+        Makyaj malzemesi
+      </label>
+
+      <label class="ihlalSecenek">
+        <input type="checkbox" value="DİĞER">
+        Diğer
+      </label>
+
+      <button id="ihlalKaydetButonu" onclick="ihlalKaydet()">
+        SEÇİLEN İHLALLERİ KAYDET
+      </button>
+    </div>
   </div>
 
 <script>
@@ -108,7 +159,7 @@ let isleniyor = false;
 let ses = null;
 let istekNo = 0;
 let mevcutOgrenciNo = null;
-let ihlalKaydedildi = false;
+let ihlalIsleniyor = false;
 
 function mesaj(yazi) {
   document.getElementById('sonuc').textContent = yazi;
@@ -162,6 +213,17 @@ function basariSesi() {
 function hataSesi() {
   tonCal(250, 0.30);
   tonCal(180, 0.30, 0.35);
+}
+
+function ihlalAlaniniGizle() {
+  document.getElementById('ihlalAlani').style.display = 'none';
+}
+
+function ihlalSecimleriniTemizle() {
+  document.querySelectorAll('#ihlalAlani input[type="checkbox"]')
+    .forEach(kutu => {
+      kutu.checked = false;
+    });
 }
 
 async function kamerayiAc() {
@@ -273,10 +335,9 @@ function sunucuyaGonder(qr, pin) {
       const ogrenci = cevap.student || {};
 
       mevcutOgrenciNo = ogrenci.no;
-      ihlalKaydedildi = false;
 
       sonuc.textContent =
-        'GİRİŞ KAYDEDİLDİ\n' +
+        'GİRİŞ BİLGİSİ\n' +
         (ogrenci.name || 'Öğrenci') + '\n' +
         (ogrenci.className || '') + ' - ' +
         (ogrenci.no || '') + '\n' +
@@ -286,10 +347,12 @@ function sunucuyaGonder(qr, pin) {
       document.getElementById('gecDurumu').textContent =
         ogrenci.late ? 'GEÇ KALDI' : 'ZAMANINDA';
 
-      document.getElementById('ihlalButonu').style.display = 'inline-block';
-      document.getElementById('ihlalButonu').disabled = false;
-      document.getElementById('ihlalButonu').textContent =
-        'KILIK KIYAFET UYGUN DEĞİL';
+      ihlalSecimleriniTemizle();
+      document.getElementById('ihlalKaydetButonu').disabled = false;
+      document.getElementById('ihlalKaydetButonu').textContent =
+        'SEÇİLEN İHLALLERİ KAYDET';
+
+      ihlalAlaniniGoster();
 
       basariSesi();
 
@@ -301,7 +364,7 @@ function sunucuyaGonder(qr, pin) {
       sonuc.textContent = 'KAYIT YAPILAMADI\n' + hata;
 
       document.getElementById('gecDurumu').textContent = '';
-      document.getElementById('ihlalButonu').style.display = 'none';
+      ihlalAlaniniGizle();
 
       if (hata.toLocaleLowerCase('tr-TR').includes('pin')) {
         sessionStorage.removeItem('okul_pin');
@@ -312,16 +375,20 @@ function sunucuyaGonder(qr, pin) {
   });
 }
 
+function ihlalAlaniniGoster() {
+  document.getElementById('ihlalAlani').style.display = 'block';
+}
+
 function kodOkundu(kod) {
-  if (isleniyor) return;
+  if (isleniyor || ihlalIsleniyor) return;
 
   isleniyor = true;
   okumaSesi();
 
   mevcutOgrenciNo = null;
-  ihlalKaydedildi = false;
 
-  document.getElementById('ihlalButonu').style.display = 'none';
+  ihlalAlaniniGizle();
+  ihlalSecimleriniTemizle();
   document.getElementById('gecDurumu').textContent = '';
 
   mesaj('QR OKUNDU: ' + kod + '\nÖğrenci kontrol ediliyor...');
@@ -345,9 +412,18 @@ function kodOkundu(kod) {
 }
 
 function ihlalKaydet() {
-  if (!mevcutOgrenciNo || ihlalKaydedildi) return;
+  if (!mevcutOgrenciNo || ihlalIsleniyor) return;
 
-  const buton = document.getElementById('ihlalButonu');
+  const secilenler = Array.from(
+    document.querySelectorAll('#ihlalAlani input[type="checkbox"]:checked')
+  ).map(kutu => kutu.value);
+
+  if (secilenler.length === 0) {
+    mesaj('Lütfen en az bir ihlal türü seçin.');
+    hataSesi();
+    return;
+  }
+
   const pin = sessionStorage.getItem('okul_pin');
 
   if (!pin) {
@@ -355,32 +431,71 @@ function ihlalKaydet() {
     return;
   }
 
+  ihlalIsleniyor = true;
+
+  const buton = document.getElementById('ihlalKaydetButonu');
   buton.disabled = true;
   buton.textContent = 'KAYDEDİLİYOR...';
 
-  jsonpGonder({
-    pin: pin,
-    action: 'violation',
-    schoolNo: mevcutOgrenciNo
-  }, function(cevap) {
+  let basarili = [];
+  let basarisiz = [];
 
-    if (cevap && cevap.success) {
-      ihlalKaydedildi = true;
-      buton.textContent = 'İHLAL KAYDEDİLDİ';
-      mesaj('GİRİŞ KAYDEDİLDİ\nKılık kıyafet ihlali de kaydedildi.');
-      basariSesi();
-
-    } else {
+  function siradakiKayit(index) {
+    if (index >= secilenler.length) {
+      ihlalIsleniyor = false;
       buton.disabled = false;
-      buton.textContent = 'KILIK KIYAFET UYGUN DEĞİL';
-      mesaj(
-        cevap && cevap.message
-          ? cevap.message
-          : 'İhlal kaydedilemedi.'
-      );
-      hataSesi();
+      buton.textContent = 'SEÇİLEN İHLALLERİ KAYDET';
+
+      let sonucMetni = '';
+
+      if (basarili.length > 0) {
+        sonucMetni += 'KAYDEDİLENLER:\n' + basarili.join('\n');
+      }
+
+      if (basarisiz.length > 0) {
+        sonucMetni += (sonucMetni ? '\n\n' : '') +
+          'KAYDEDİLEMEYENLER:\n' + basarisiz.join('\n');
+      }
+
+      if (basarili.length > 0) {
+        mesaj(sonucMetni);
+        basariSesi();
+      } else {
+        mesaj(sonucMetni || 'Hiçbir ihlal kaydedilemedi.');
+        hataSesi();
+      }
+
+      return;
     }
-  });
+
+    const tur = secilenler[index];
+
+    buton.textContent =
+      'KAYDEDİLİYOR... (' + (index + 1) + '/' + secilenler.length + ')';
+
+    jsonpGonder({
+      pin: pin,
+      action: 'violation',
+      schoolNo: mevcutOgrenciNo,
+      violationType: tur
+    }, function(cevap) {
+
+      if (cevap && cevap.success) {
+        basarili.push(tur);
+      } else {
+        basarisiz.push(
+          tur + ': ' +
+          (cevap && cevap.message
+            ? cevap.message
+            : 'Kayıt yapılamadı.')
+        );
+      }
+
+      siradakiKayit(index + 1);
+    });
+  }
+
+  siradakiKayit(0);
 }
 </script>
 </body>
